@@ -240,7 +240,7 @@
                 card.className = 'card-paper p-3 pb-4 cursor-pointer hover:shadow-md transition bg-white text-center relative';
                 card.dataset.memberId = m.id;
                 card.dataset.memberPin = m.pin || '';
-                const profileImage = localStorage.getItem(`profileImage:${m.id}`);
+                const profileImage = m.profileImage;
                 card.innerHTML = `
                     ${pendingCount > 0 ? '<span class="pending-dot" title="รอยืนยัน"></span>' : ''}
                     <img src="${profileImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.name)}&backgroundColor=7aa9dd`}" class="w-16 h-16 rounded-full mx-auto mb-2 object-cover">
@@ -270,7 +270,7 @@
                 .reduce((sum, d) => sum + Number(d.amount), 0);
             document.getElementById('detailMemberName').innerText = member.name;
             document.getElementById('detailNameLabel').innerText = member.name;
-            const profileImage = localStorage.getItem(`profileImage:${member.id}`);
+            const profileImage = member.profileImage;
             document.getElementById('detailAvatar').src = profileImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.name)}&backgroundColor=7aa9dd`;
             document.getElementById('detailTotalDebtValue').innerHTML = `รวม ${totalOwedToMember.toLocaleString()} ฿`;
             
@@ -623,7 +623,7 @@
             document.getElementById('editMemberName').value = currentMemberData.name || '';
             document.getElementById('editMemberPhone').value = currentMemberData.phone || '';
 
-            const profileImage = localStorage.getItem(`profileImage:${currentMemberData.id}`);
+            const profileImage = currentMemberData.profileImage;
             const profilePreview = document.getElementById('editProfilePreview');
             const profilePreviewImg = document.getElementById('editProfilePreviewImg');
             if (profileImage) {
@@ -691,7 +691,6 @@
                 let profileBase64 = null;
                 if (profileFile) {
                     profileBase64 = await new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsDataURL(profileFile); });
-                    localStorage.setItem(`profileImage:${currentMemberData.id}`, profileBase64);
                 }
 
                 let qrBase64 = null;
@@ -702,7 +701,8 @@
                 await dbManager.updateMember(currentMemberData.id, {
                     name: name || currentMemberData.name,
                     phone: phone || currentMemberData.phone,
-                    qrCodeData: qrBase64 || currentMemberData.qrCodeData
+                    qrCodeData: qrBase64 || currentMemberData.qrCodeData,
+                    profileImage: profileBase64 || currentMemberData.profileImage
                 });
 
                 document.getElementById('editMemberModal').classList.add('hidden');
