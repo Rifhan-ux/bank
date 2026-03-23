@@ -24,7 +24,6 @@ class SMPSupabase {
             }));
         }
 
-    // ใน database.js
     async getMemberById(id) {
         const { data, error } = await this.db
             .from('members')
@@ -34,11 +33,15 @@ class SMPSupabase {
 
         if (error) return null;
 
-        // คืนค่าออกไป โดยต้องมี qrcodedata ติดไปด้วย
-        return data; 
+        return {
+            ...data,
+            qrCodeData: data.qrcodedata,
+            pin: data.pin,
+            phone: data.phone
+        };
     }
 
-        async addMember(member) {
+    async addMember(member) {
             const dataForDB = {
                 id: member.id,
                 name: member.name,
@@ -51,6 +54,18 @@ class SMPSupabase {
             if (error) throw error;
             return true;
         }
+
+    async updateMember(id, updates) {
+        const dataForDB = {};
+        if (typeof updates.name === 'string') dataForDB.name = updates.name;
+        if (typeof updates.phone === 'string') dataForDB.phone = updates.phone;
+        if (typeof updates.qrCodeData === 'string') dataForDB.qrcodedata = updates.qrCodeData;
+        if (Object.keys(dataForDB).length === 0) return true;
+
+        const { error } = await this.db.from('members').update(dataForDB).eq('id', id);
+        if (error) throw error;
+        return true;
+    }
 
     // ==================== DEBT OPERATIONS ====================
     async getAllDebts() {
@@ -110,7 +125,7 @@ class SMPSupabase {
         creditorid: debt.creditorId,  // เช็คว่าสะกดตรงกับที่ส่งมา (I ใหญ่)
         creditorname: debt.creditorName,
         status: 'pending',
-        createdat: debt.createdAt
+        createdat: debt.createdAt || new Date().toISOString()
     };
 
     const { error } = await this.db.from('debts').insert([dataForDB]);
@@ -144,8 +159,8 @@ class SMPSupabase {
         const { error: pError } = await this.db.from('payments').insert([paymentData]);
         if (pError) throw pError;
 
-        // ลบหนี้ออกหลังจากจ่าย (หรือจะเปลี่ยน status เป็น paid ก็ได้)
-        const { error: dError } = await this.db.from('debts').delete().eq('id', debtId);
+        // เปลี่ยนสถานะเป็น paid เพื่อคงประวัติหนี้และกันข้อมูลค้าง
+        const { error: dError } = await this.db.from('debts').update({ status: 'paid' }).eq('id', debtId);
         if (dError) throw dError;
 
         return { success: true, message: "ชำระเงินเรียบร้อย" };
