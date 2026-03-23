@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>SMP BANK · ระบบจัดการหนี้</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="database.js"></script>
+    <style>
+        * { font-family: 'Kanit', sans-serif; }
+        body {
+            background-color: #f4f9ff;
+            background-image: linear-gradient(to right, #cbdff2 1px, transparent 1px),
+                              linear-gradient(to bottom, #cbdff2 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .card-paper { background: rgba(255,255,255,0.95); border-radius: 28px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); }
+        .debt-block { background: white; border-left: 6px solid #7aa9dd; border-radius: 20px; }
+        .pending-badge { background: #fff3e0; color: #e67e22; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; }
+        .fab-add { position: fixed; bottom: 24px; right: 20px; background: #2c7da0; color: white; width: 60px; height: 60px; border-radius: 999px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 14px rgba(0,0,0,0.2); z-index: 30; cursor: pointer; }
+        .fab-add:active { transform: scale(0.92); }
+        .back-button { background: white; width: 44px; height: 44px; border-radius: 40px; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; }
+        .friend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+        .modal-mask { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .toast-notification { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1f2937; color: white; padding: 10px 20px; border-radius: 40px; z-index: 100; font-size: 14px; white-space: nowrap; pointer-events: none; }
+        @keyframes fadeOut { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+        .animate-toast { animation: fadeOut 2s ease forwards; }
+        button:active { transform: scale(0.97); }
+        .date-text { font-size: 0.65rem; color: #8b9dc3; font-weight: 400; }
+        .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 200; }
+    </style>
+</head>
+<body class="pb-28 antialiased">
+
+    <div id="app" class="max-w-lg mx-auto px-4 py-5 relative">
+        <div id="memberListView">
+            <div class="flex justify-between items-center mb-5 pt-2">
+                <h1 class="text-2xl font-semibold text-slate-700"><i class="fas fa-book text-sky-500 mr-2"></i>SMP BANK</h1>
+            </div>
+            <div id="membersGrid" class="friend-grid"></div>
+            <div class="text-center text-slate-400 text-sm mt-8" id="emptyMembersMsg">+ เพิ่มสมาชิกด้วยปุ่มมุมขวาล่าง</div>
+        </div>
+
+        <div id="detailView" class="hidden">
+            <div class="flex items-center gap-3 mb-4 sticky top-0 bg-[#f4f9ff]/95 backdrop-blur-sm py-2 z-10">
+                <button id="backToMembersBtn" class="back-button"><i class="fas fa-arrow-left"></i></button>
+                <h2 class="text-xl font-bold flex-1 truncate" id="detailMemberName">-</h2>
+                <div id="detailTotalDebt" class="bg-white px-3 py-1.5 rounded-full text-sm font-semibold">รวม 0 บาท</div>
+            </div>
+            <div class="card-paper p-5 mb-5 flex flex-col items-center">
+                <img id="detailAvatar" class="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md" src="">
+                <div class="mt-2 text-lg font-semibold" id="detailNameLabel"></div>
+                <div id="detailQrCode" class="mt-2 p-2 bg-white rounded-xl shadow-sm w-full flex justify-center"></div>
+            </div>
+            <div id="debtBlocksContainer" class="space-y-4"></div>
+            <div class="mt-6 flex gap-3 justify-center">
+                <button id="addDebtForOthersBtn" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2.5 px-5 rounded-full flex items-center gap-2"><i class="fas fa-plus-circle"></i> เพิ่มหนี้ให้คนอื่น</button>
+                <button id="viewHistoryBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 px-5 rounded-full flex items-center gap-2"><i class="fas fa-history"></i> ประวัติ</button>
+            </div>
+        </div>
+
+        <div id="paymentView" class="hidden">
+            <div class="flex items-center gap-3 mb-5">
+                <button id="backFromPaymentBtn" class="back-button"><i class="fas fa-arrow-left"></i></button>
+                <h2 class="text-xl font-bold">ชำระหนี้</h2>
+            </div>
+            <div class="card-paper p-6 text-center">
+                <div class="text-2xl font-bold text-slate-800" id="paymentAmount">0</div>
+                <div class="text-sm text-slate-500 mt-1" id="paymentDebtInfo"></div>
+                <div class="my-4 p-3 bg-slate-50 rounded-xl">
+                    <p class="text-sm font-medium mb-2">สแกน QR เพื่อโอนเงินให้เจ้าหนี้</p>
+                    <div id="qrcodeContainer" class="flex justify-center"></div>
+                </div>
+                <div class="border-t pt-4 text-left">
+                    <label class="block text-sm font-medium mb-2"><i class="fas fa-image mr-1"></i> แนบสลิป</label>
+                    <input type="file" id="slipUpload" accept="image/*" class="w-full text-sm border rounded-xl p-2">
+                    <div id="slipPreview" class="mt-3 hidden"><img id="slipPreviewImg" class="max-h-32 mx-auto rounded-lg"></div>
+                    <button id="confirmPaymentBtn" class="mt-4 w-full bg-emerald-500 text-white py-3 rounded-xl font-semibold">ยืนยันการชำระเงิน</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="historyView" class="hidden">
+            <div class="flex items-center gap-3 mb-5">
+                <button id="backFromHistoryBtn" class="back-button"><i class="fas fa-arrow-left"></i></button>
+                <h2 class="text-xl font-bold">ประวัติการจ่ายเงิน</h2>
+            </div>
+            <div id="historyList" class="space-y-3"></div>
+        </div>
+
+        <button id="fabAddMember" class="fab-add"><i class="fas fa-user-plus text-2xl"></i></button>
+    </div>
+
+    <div id="addMemberModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-mask">
+        <div class="bg-white rounded-2xl w-96 max-w-[90%] p-6">
+            <h3 class="text-lg font-bold mb-3">➕ เพิ่มสมาชิก</h3>
+            <input type="text" id="newMemberName" placeholder="ชื่อสมาชิก" class="w-full border rounded-xl px-4 py-2 mb-3">
+            <input type="password" id="newMemberPin" maxlength="4" placeholder="ตั้งรหัส PIN 4 หลัก" class="w-full border rounded-xl px-4 py-2 mb-3 text-center tracking-widest">
+            <input type="tel" id="newMemberPhone" placeholder="เบอร์โทรศัพท์/พร้อมเพย์" class="w-full border rounded-xl px-4 py-2 mb-3">
+            <input type="file" id="memberQrUpload" accept="image/*" class="w-full text-sm border rounded-xl p-2">
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="closeMemberModalBtn" class="px-4 py-2 text-slate-500">ยกเลิก</button>
+                <button id="confirmAddMemberBtn" class="bg-sky-500 text-white px-5 py-2 rounded-xl">เพิ่ม</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addDebtModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-mask">
+        <div class="bg-white rounded-2xl w-96 max-w-[90%] p-6">
+            <h3 class="text-lg font-bold mb-3">💰 เพิ่มหนี้ให้คนอื่น</h3>
+            <select id="debtReceiverSelect" class="w-full border rounded-xl px-4 py-2 mb-3"></select>
+            <input type="text" id="debtTitle" placeholder="ชื่อรายการ" class="w-full border rounded-xl px-4 py-2 mb-3">
+            <input type="number" id="debtAmount" placeholder="จำนวนเงิน" class="w-full border rounded-xl px-4 py-2 mb-3">
+            <div class="flex justify-end gap-2">
+                <button id="closeDebtModalBtn" class="px-4 py-2 text-slate-500">ยกเลิก</button>
+                <button id="confirmAddDebtBtn" class="bg-emerald-500 text-white px-5 py-2 rounded-xl">เพิ่มหนี้</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ฟังก์ชันระบบ PIN
+        function checkPinAndShowDetail(memberId, correctPin) {
+            if (!correctPin || correctPin === 'undefined' || correctPin === 'null' || correctPin === '') {
+                showDetailView(memberId);
+                return;
+            }
+            const userPin = prompt("🔐 กรุณาใส่รหัส PIN 4 หลัก:");
+            if (userPin === null) return;
+            if (String(userPin) === String(correctPin)) {
+                showDetailView(memberId);
+            } else {
+                alert("❌ รหัส PIN ไม่ถูกต้อง!");
+            }
+        }
+
+        // ฟังก์ชันแปลงวันที่
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            const date = d.getDate();
+            const month = months[d.getMonth()];
+            const year = (d.getFullYear() + 543).toString().slice(-2);
+            const hours = d.getHours().toString().padStart(2, '0');
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            return `${date} ${month} ${year} | ${hours}:${minutes}`;
+        }
+
+        let currentMemberId = null;
+        let pendingPayment = null;
+
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification animate-toast';
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        function showLoading() {
+            let loading = document.getElementById('loadingOverlay');
+            if (!loading) {
+                loading = document.createElement('div');
+                loading.id = 'loadingOverlay';
+                loading.className = 'loading-overlay';
+                loading.innerHTML = '<div class="bg-white p-4 rounded-xl shadow-lg"><i class="fas fa-spinner fa-spin text-2xl text-sky-500"></i><p class="mt-2 text-sm">กำลังดำเนินการ...</p></div>';
+                document.body.appendChild(loading);
+            }
+            loading.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            const loading = document.getElementById('loadingOverlay');
+            if (loading) loading.classList.add('hidden');
+        }
+
+        async function renderMemberList() {
+            const members = await dbManager.getAllMembers();
+            const allDebts = await dbManager.getAllDebts(); 
+            const grid = document.getElementById('membersGrid');
+            const emptyMsg = document.getElementById('emptyMembersMsg');
+            
+            grid.innerHTML = '';
+            if (!members || members.length === 0) {
+                if (emptyMsg) emptyMsg.classList.remove('hidden');
+                return;
+            }
+            emptyMsg.classList.add('hidden');
+
+            members.forEach(m => {
+                const totalDebt = allDebts
+                    .filter(d => String(d.debtorid) === String(m.id) && d.status === 'confirmed')
+                    .reduce((sum, d) => sum + Number(d.amount), 0);
+
+                grid.innerHTML += `
+                    <div class="card-paper p-3 pb-4 cursor-pointer hover:shadow-md transition bg-white text-center" 
+                        onclick="checkPinAndShowDetail('${m.id}', '${m.pin}')">
+                        <img src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.name)}&backgroundColor=7aa9dd" class="w-16 h-16 rounded-full mx-auto mb-2">
+                        <div class="font-medium truncate text-slate-700">${escapeHtml(m.name)}</div>
+                        <div class="text-rose-600 font-bold text-sm mt-1">
+                            ${totalDebt > 0 ? `ติดหนี้: ${totalDebt.toLocaleString()} ฿` : '<span class="text-emerald-500 text-xs">ไม่มีหนี้ค้าง</span>'}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function showDetailView(memberId) {
+            showLoading();
+            const member = await dbManager.getMemberById(memberId);
+            if (!member) { hideLoading(); return; }
+            currentMemberId = memberId;
+            
+            const summary = await dbManager.getMemberSummary(memberId);
+            document.getElementById('detailMemberName').innerText = member.name;
+            document.getElementById('detailNameLabel').innerText = member.name;
+            document.getElementById('detailAvatar').src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.name)}&backgroundColor=7aa9dd`;
+            document.getElementById('detailTotalDebt').innerHTML = `รวม ${summary.totalDebt.toLocaleString()} ฿`;
+            
+            const qrContainer = document.getElementById('detailQrCode');
+            qrContainer.innerHTML = '';
+            if (member.qrCodeData) {
+                const img = document.createElement('img');
+                img.src = member.qrCodeData;
+                img.className = 'w-32 h-32 object-contain mx-auto rounded-lg shadow-sm';
+                qrContainer.appendChild(img);
+            } else {
+                qrContainer.innerHTML = `<div class="py-2 text-center text-sky-700 font-bold">📞 ${member.phone || 'ไม่ระบุเบอร์'}</div>`;
+            }
+            
+            const allDebts = await dbManager.getAllDebts();
+            const pending = allDebts.filter(d => String(d.debtorId) === String(memberId) && d.status === 'pending');
+            const confirmed = allDebts.filter(d => String(d.debtorId) === String(memberId) && d.status === 'confirmed');
+            
+            const groups = new Map();
+            confirmed.forEach(d => {
+                if (!groups.has(d.creditorName)) groups.set(d.creditorName, []);
+                groups.get(d.creditorName).push(d);
+            });
+            
+            let html = '';
+            if (pending.length) {
+                html += `<div class="debt-block p-4 bg-amber-50 border-l-amber-400 mb-4 shadow-sm">
+                    <div class="font-bold text-amber-700 mb-2 text-sm">⏳ รอยืนยัน (${pending.length})</div>`;
+                pending.forEach(d => {
+                    html += `<div class="flex justify-between items-center bg-white p-3 rounded-xl mb-2">
+                        <div><div class="font-medium text-sm">${escapeHtml(d.title)}</div><div class="text-xs text-slate-400">${d.amount.toLocaleString()} ฿ · ${escapeHtml(d.creditorName)}</div></div>
+                        <button onclick="approveDebt('${d.id}')" class="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs">ยืนยัน</button>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+            
+            if (groups.size === 0 && pending.length === 0) {
+                html += `<div class="card-paper p-10 text-center text-slate-400 text-sm">✨ ไม่มีหนี้คงค้าง</div>`;
+            } else {
+                for (let [creditor, debts] of groups) {
+                    const total = debts.reduce((s, d) => s + Number(d.amount), 0);
+                    html += `<div class="debt-block p-4 mb-4 shadow-sm">
+                        <div class="flex justify-between items-center border-b pb-2 mb-3">
+                            <span class="font-bold text-slate-700 text-sm"><i class="fas fa-user-circle text-sky-500"></i> ${escapeHtml(creditor)}</span>
+                            <div class="flex gap-2">
+                                <span class="text-rose-500 font-bold text-sm">-${total.toLocaleString()} ฿</span>
+                                <button onclick="openPaymentForAll('${creditor}', '${debts[0].creditorId}')" class="bg-slate-100 text-sky-600 text-[10px] rounded-full px-2 py-1 font-bold">จ่ายเหมา</button>
+                            </div>
+                        </div>`;
+                    debts.forEach(d => {
+                        html += `<div class="flex justify-between items-center p-2 mb-2 rounded-xl bg-gray-50/80">
+                            <div><div class="text-sm font-medium">${escapeHtml(d.title)}</div><div class="date-text">${formatDate(d.createdat)}</div><div class="text-xs font-bold text-slate-500">${Number(d.amount).toLocaleString()} บาท</div></div>
+                            <button onclick="openPaymentForDebt('${d.id}')" class="bg-white border px-3 py-1 rounded-full text-xs shadow-sm">จ่าย</button>
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+            
+            document.getElementById('debtBlocksContainer').innerHTML = html;
+            document.getElementById('memberListView').classList.add('hidden');
+            document.getElementById('detailView').classList.remove('hidden');
+            hideLoading();
+        }
+
+        async function approveDebt(id) {
+            showLoading();
+            await dbManager.updateDebt({ id, status: 'confirmed' });
+            showDetailView(currentMemberId);
+            renderMemberList();
+        }
+
+        async function openPaymentForDebt(debtId) {
+            showLoading();
+            const all = await dbManager.getAllDebts();
+            const debt = all.find(d => d.id === debtId);
+            if (!debt) { hideLoading(); return; }
+
+            // ดึงข้อมูลเจ้าหนี้มาโชว์ QR
+            const creditor = await dbManager.getMemberById(debt.creditorId);
+            pendingPayment = { type: 'single', debtid: debt.id, amount: debt.amount, creditorid: debt.creditorId };
+
+            document.getElementById('paymentAmount').innerText = `${Number(debt.amount).toLocaleString()} บาท`;
+            document.getElementById('paymentDebtInfo').innerHTML = `${escapeHtml(debt.title)}<br><span class="text-xs text-slate-400">เจ้าหนี้: ${escapeHtml(debt.creditorName)}</span>`;
+            
+            const qrDiv = document.getElementById('qrcodeContainer');
+            qrDiv.innerHTML = '';
+            if (creditor && creditor.qrcodedata) {
+                const img = document.createElement('img');
+                img.src = creditor.qrcodedata;
+                img.className = 'w-48 h-48 object-contain mx-auto rounded-lg shadow-md border';
+                qrDiv.appendChild(img);
+            } else {
+                qrDiv.innerHTML = `<div class="p-6 bg-slate-100 rounded-xl text-center"><p class="text-xs text-slate-400 mb-1">เบอร์โทร/พร้อมเพย์เจ้าหนี้</p><p class="text-lg font-bold text-slate-800">${creditor?.phone || 'ไม่ระบุเบอร์'}</p></div>`;
+            }
+
+            document.getElementById('detailView').classList.add('hidden');
+            document.getElementById('paymentView').classList.remove('hidden');
+            hideLoading();
+        }
+
+        async function openPaymentForAll(creditorName, creditorId) {
+    showLoading();
+    const allDebts = await dbManager.getAllDebts();
+    // กรองหนี้ที่ต้องจ่ายให้เจ้าหนี้คนนี้
+    const debtsToPay = allDebts.filter(d => String(d.debtorid) === String(currentMemberId) && d.creditorname === creditorName && d.status === 'confirmed');
+    
+    if (debtsToPay.length === 0) { hideLoading(); return; }
+    const totalAmount = debtsToPay.reduce((s, d) => s + Number(d.amount), 0);
+    
+    // 🔍 จุดสำคัญ: ไปดึงข้อมูลเจ้าหนี้มาใหม่เพื่อเอาไฟล์รูป QR
+    const creditor = await dbManager.getMemberById(creditorId);
+    pendingPayment = { type: 'group', creditorname: creditorName, creditorid: creditorId, totalAmount, debts: debtsToPay };
+    
+    document.getElementById('paymentAmount').innerText = `${totalAmount.toLocaleString()} บาท`;
+    document.getElementById('paymentDebtInfo').innerHTML = `ชำระหนี้ทั้งหมดให้ ${escapeHtml(creditorName)}<br><span class="text-xs text-slate-400">จำนวน ${debtsToPay.length} รายการ</span>`;
+    
+    
+    // ✅ ตรวจสอบทั้ง qrCodeData และ qrcodedata (กันพลาด)
+    const qrImage = creditor?.qrCodeData || creditor?.qrcodedata;
+    const qrDiv = document.getElementById('qrcodeContainer'); // หรือ qrcodeDisplay ตามที่นายใช้
+    qrDiv.innerHTML = '';
+
+    if (qrImage && qrImage.startsWith('data:image')) {
+    // 2. ถ้ามีข้อมูล Base64 จริง ให้สร้างแท็ก img
+    const img = document.createElement('img');
+    img.src = qrImage; 
+    img.className = 'w-48 h-48 object-contain mx-auto rounded-lg shadow-md';
+    qrDiv.appendChild(img);
+    } else {
+    // 3. ถ้าไม่มีรูปจริงๆ ให้โชว์เบอร์โทร แทนการปล่อยให้รูปแตก
+    qrDiv.innerHTML = `<div class="p-6 bg-slate-100 rounded-xl text-center font-bold text-slate-700">
+                        📞 ${creditor?.phone || 'ไม่ระบุเบอร์'}
+                      </div>`;
+        }
+    
+    document.getElementById('detailView').classList.add('hidden');
+    document.getElementById('paymentView').classList.remove('hidden');
+    hideLoading();
+}
+
+        async function processPayment() {
+            if (!pendingPayment) return;
+            const slipFile = document.getElementById('slipUpload').files[0];
+            if (!slipFile) { showToast('⚠️ กรุณาแนบสลิปการโอนเงิน'); return; }
+            
+            showLoading();
+            try {
+                const slipBase64 = await new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.readAsDataURL(slipFile);
+                });
+                
+                if (pendingPayment.type === 'single') {
+                    await dbManager.paySingleDebt(pendingPayment.debtid, slipBase64, currentMemberId);
+                } else {
+                    // วนลูปจ่ายแบบกลุ่ม (เรียกใช้ผ่าน dbManager ตามโครงสร้างใหม่)
+                    for (const d of pendingPayment.debts) {
+                        await dbManager.paySingleDebt(d.id, slipBase64, currentMemberId);
+                    }
+                }
+                
+                showToast('✅ ชำระเงินสำเร็จ');
+                pendingPayment = null;
+                document.getElementById('paymentView').classList.add('hidden');
+                await showDetailView(currentMemberId);
+                await renderMemberList();
+            } catch (error) {
+                showToast('❌ ผิดพลาด: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function showHistory() {
+            showLoading();
+            const payments = await dbManager.getAllPayments();
+            const container = document.getElementById('historyList');
+            
+            if (!payments || payments.length === 0) {
+                container.innerHTML = '<div class="card-paper p-10 text-center text-slate-300 text-sm">ยังไม่มีประวัติการจ่ายเงิน</div>';
+            } else {
+                const sorted = payments.sort((a, b) => new Date(b.paidat) - new Date(a.paidat));
+                container.innerHTML = sorted.map(h => `
+                    <div class="card-paper p-4 shadow-sm border-l-4 border-emerald-400">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="font-bold text-slate-700 text-sm">${escapeHtml(h.title)}</div>
+                                <div class="text-xs text-emerald-600 font-bold">${Number(h.amount).toLocaleString()} ฿</div>
+                                <div class="text-[10px] text-slate-400">ให้ ${escapeHtml(h.paidtoname)}</div>
+                                <div class="date-text mt-1">${formatDate(h.paidat)}</div>
+                            </div>
+                        </div>
+                        ${h.slipimage ? `<img src="${h.slipimage}" class="mt-2 max-h-24 rounded-lg border cursor-pointer" onclick="window.open(this.src)">` : ''}
+                    </div>
+                `).join('');
+            }
+            
+            document.getElementById('detailView').classList.add('hidden');
+            document.getElementById('memberListView').classList.add('hidden');
+            document.getElementById('historyView').classList.remove('hidden');
+            hideLoading();
+        }
+
+        async function addNewMember(name, pin, phone, qrBase64) {
+            if (!name.trim()) return false;
+            showLoading();
+            try {
+                await dbManager.addMember({
+                    id: Date.now().toString(),
+                    name: name.trim(),
+                    pin: pin,
+                    phone: phone,
+                    qrCodeData: qrBase64 || null
+                });
+                await renderMemberList();
+                return true;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('fabAddMember').onclick = () => document.getElementById('addMemberModal').classList.remove('hidden');
+        document.getElementById('closeMemberModalBtn').onclick = () => document.getElementById('addMemberModal').classList.add('hidden');
+        
+        document.getElementById('confirmAddMemberBtn').onclick = async () => {
+            const name = document.getElementById('newMemberName').value;
+            const pin = document.getElementById('newMemberPin').value;
+            const phone = document.getElementById('newMemberPhone').value;
+            const file = document.getElementById('memberQrUpload').files[0];
+            
+            let qrBase64 = null;
+            if (file) {
+                qrBase64 = await new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsDataURL(file); });
+            }
+            if (await addNewMember(name, pin, phone, qrBase64)) {
+                document.getElementById('addMemberModal').classList.add('hidden');
+                document.getElementById('newMemberName').value = '';
+                document.getElementById('newMemberPin').value = '';
+                document.getElementById('newMemberPhone').value = '';
+                showToast('✅ เพิ่มสมาชิกแล้ว');
+            }
+        };
+
+        document.getElementById('confirmAddDebtBtn').onclick = async () => {
+            const title = document.getElementById('debtTitle').value;
+            const amount = parseFloat(document.getElementById('debtAmount').value);
+            const receiverId = document.getElementById('debtReceiverSelect').value;
+            
+            if (title && amount > 0 && receiverId) {
+                showLoading();
+                const creditor = await dbManager.getMemberById(currentMemberId);
+                const newDebt = {
+                    id: 'debt_' + Date.now(),
+                    title: title,
+                    amount: amount,
+                    debtorId: receiverId,
+                    creditorId: currentMemberId,
+                    creditorName: creditor.name
+                };
+                await dbManager.addDebt(newDebt);
+                document.getElementById('addDebtModal').classList.add('hidden');
+                document.getElementById('debtTitle').value = '';
+                document.getElementById('debtAmount').value = '';
+                await showDetailView(currentMemberId);
+                hideLoading();
+                showToast('💰 เพิ่มหนี้สำเร็จ');
+            } else {
+                alert('กรุณากรอกข้อมูลให้ครบ');
+            }
+        };
+
+        document.getElementById('backToMembersBtn').onclick = () => {
+            document.getElementById('detailView').classList.add('hidden');
+            document.getElementById('memberListView').classList.remove('hidden');
+        };
+        document.getElementById('backFromPaymentBtn').onclick = () => {
+            document.getElementById('paymentView').classList.add('hidden');
+            document.getElementById('detailView').classList.remove('hidden');
+        };
+        document.getElementById('backFromHistoryBtn').onclick = () => {
+            document.getElementById('historyView').classList.add('hidden');
+            document.getElementById('detailView').classList.remove('hidden');
+        };
+        document.getElementById('confirmPaymentBtn').onclick = processPayment;
+        document.getElementById('viewHistoryBtn').onclick = showHistory;
+        document.getElementById('slipUpload').onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = ev => { document.getElementById('slipPreviewImg').src = ev.target.result; document.getElementById('slipPreview').classList.remove('hidden'); };
+                reader.readAsDataURL(file);
+            }
+        };
+        document.getElementById('addDebtForOthersBtn').onclick = async () => {
+            const members = await dbManager.getAllMembers();
+            const select = document.getElementById('debtReceiverSelect');
+            select.innerHTML = members.filter(m => m.id !== currentMemberId).map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+            document.getElementById('addDebtModal').classList.remove('hidden');
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            showLoading();
+            try {
+                await dbManager.init();
+                await renderMemberList();
+            } catch (e) {
+                console.error(e);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
+    </script>
+</body>
+</html>
