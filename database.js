@@ -20,7 +20,8 @@ class SMPSupabase {
                 ...m,
                 qrCodeData: m.qrcodedata,
                 pin: m.pin,
-                phone: m.phone
+                phone: m.phone,
+                profileImage: m.profileimage
             }));
         }
 
@@ -37,7 +38,8 @@ class SMPSupabase {
             ...data,
             qrCodeData: data.qrcodedata,
             pin: data.pin,
-            phone: data.phone
+            phone: data.phone,
+            profileImage: data.profileimage
         };
     }
 
@@ -60,6 +62,7 @@ class SMPSupabase {
         if (typeof updates.name === 'string') dataForDB.name = updates.name;
         if (typeof updates.phone === 'string') dataForDB.phone = updates.phone;
         if (typeof updates.qrCodeData === 'string') dataForDB.qrcodedata = updates.qrCodeData;
+        if (typeof updates.profileImage === 'string') dataForDB.profileimage = updates.profileImage;
         if (Object.keys(dataForDB).length === 0) return true;
 
         const { error } = await this.db.from('members').update(dataForDB).eq('id', id);
