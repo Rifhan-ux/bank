@@ -3,762 +3,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>SMP BANK · ระบบจัดการหนี้</title>
+    <title>SMP BANK · ระบบล่ม</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="database.js"></script>
     <style>
-        * { font-family: 'Kanit', sans-serif; }
-        body {
-            background-color: #f4f9ff;
-            background-image: linear-gradient(to right, #cbdff2 1px, transparent 1px),
-                              linear-gradient(to bottom, #cbdff2 1px, transparent 1px);
-            background-size: 24px 24px;
+        :root {
+            --bg: #06070b;
+            --fg: #f8fafc;
+            --hot: #ff3b7a;
+            --cyan: #22d3ee;
+            --acid: #a3ff12;
         }
-        .card-paper { background: rgba(255,255,255,0.95); border-radius: 28px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); }
-        .debt-block { background: white; border-left: 6px solid #7aa9dd; border-radius: 20px; }
-        .pending-badge { background: #fff3e0; color: #e67e22; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; }
-        .pending-dot { position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; background: #ef4444; border-radius: 999px; box-shadow: 0 0 0 2px white; }
-        .fab-add { position: fixed; bottom: 24px; right: 20px; background: #2c7da0; color: white; width: 60px; height: 60px; border-radius: 999px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 14px rgba(0,0,0,0.2); z-index: 30; cursor: pointer; }
-        .fab-add:active { transform: scale(0.92); }
-        .back-button { background: white; width: 44px; height: 44px; border-radius: 40px; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; }
-        .friend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-        .modal-mask { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
-        .toast-notification { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1f2937; color: white; padding: 10px 20px; border-radius: 40px; z-index: 100; font-size: 14px; white-space: nowrap; pointer-events: none; }
-        @keyframes fadeOut { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
-        .animate-toast { animation: fadeOut 2s ease forwards; }
-        button:active { transform: scale(0.97); }
-        .date-text { font-size: 0.65rem; color: #8b9dc3; font-weight: 400; }
-        .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 200; }
-        .profile-chip { background: #eef6ff; color: #2c7da0; }
-        .profile-chip:active { transform: scale(0.97); }
+        * { box-sizing: border-box; font-family: 'Kanit', sans-serif; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 700px at 20% 10%, rgba(255,59,122,0.18), transparent 60%),
+                        radial-gradient(900px 600px at 80% 80%, rgba(34,211,238,0.16), transparent 55%),
+                        var(--bg);
+            color: var(--fg);
+            overflow: hidden;
+        }
+
+        .wrap {
+            position: relative;
+            height: 100%;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            isolation: isolate;
+        }
+
+        /* subtle moving scanlines */
+        .wrap::before {
+            content: "";
+            position: absolute;
+            inset: -120px;
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    rgba(255,255,255,0.06) 0px,
+                    rgba(255,255,255,0.06) 1px,
+                    transparent 2px,
+                    transparent 6px
+                );
+            mix-blend-mode: overlay;
+            opacity: 0.35;
+            transform: rotate(-2deg);
+            animation: scan 3.2s linear infinite;
+            pointer-events: none;
+            z-index: -2;
+        }
+
+        /* "bad tv" noise */
+        .noise {
+            position: absolute;
+            inset: -20%;
+            background-image:
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+            background-size: 160px 160px;
+            opacity: 0.10;
+            mix-blend-mode: overlay;
+            animation: noiseShift 0.25s steps(2, end) infinite;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .panel {
+            width: min(980px, 100%);
+            border-radius: 28px;
+            padding: clamp(18px, 4vw, 40px);
+            background: rgba(10, 12, 18, 0.55);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 30px 120px rgba(0,0,0,0.55);
+            backdrop-filter: blur(10px);
+        }
+
+        .big {
+            position: relative;
+            margin: 0;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            line-height: 0.98;
+            font-size: clamp(44px, 7.4vw, 92px);
+            text-transform: uppercase;
+            text-shadow:
+                0 0 0 rgba(0,0,0,0),
+                0 0 26px rgba(255,59,122,0.18),
+                0 0 30px rgba(34,211,238,0.10);
+            animation: rage 900ms infinite;
+            will-change: transform, filter;
+        }
+
+        /* glitch layers */
+        .big::before,
+        .big::after {
+            content: attr(data-text);
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            mix-blend-mode: screen;
+            opacity: 0.9;
+        }
+        .big::before {
+            color: var(--cyan);
+            transform: translate(2px, -1px);
+            clip-path: inset(0 0 58% 0);
+            animation: glitchTop 1.1s infinite linear alternate-reverse;
+        }
+        .big::after {
+            color: var(--hot);
+            transform: translate(-3px, 2px);
+            clip-path: inset(52% 0 0 0);
+            animation: glitchBottom 0.85s infinite linear alternate-reverse;
+        }
+
+        .sub {
+            margin-top: 14px;
+            font-size: clamp(14px, 1.8vw, 18px);
+            opacity: 0.85;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .tag {
+            border: 1px dashed rgba(255,255,255,0.22);
+            border-radius: 999px;
+            padding: 6px 12px;
+            background: rgba(255,255,255,0.04);
+        }
+        .tag b { color: var(--acid); }
+
+        .marquee {
+            margin-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding-top: 14px;
+            overflow: hidden;
+            white-space: nowrap;
+            opacity: 0.8;
+            font-size: 13px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+        .marquee > div {
+            display: inline-block;
+            padding-left: 100%;
+            animation: slide 7s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(-60px) rotate(-2deg); opacity: 0.25; }
+            50% { opacity: 0.40; }
+            100% { transform: translateY(60px) rotate(-2deg); opacity: 0.25; }
+        }
+        @keyframes noiseShift {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(2%, -1%); }
+            50% { transform: translate(-1%, 2%); }
+            75% { transform: translate(1%, 1%); }
+            100% { transform: translate(0, 0); }
+        }
+        @keyframes rage {
+            0% { transform: translate(0, 0) skewX(0deg); filter: saturate(1.0) contrast(1.0); }
+            15% { transform: translate(-1px, 1px) skewX(-0.6deg); }
+            35% { transform: translate(1px, -1px) skewX(0.8deg); filter: saturate(1.25) contrast(1.1); }
+            55% { transform: translate(-2px, 0) skewX(-0.4deg); }
+            75% { transform: translate(2px, 1px) skewX(0.9deg); filter: saturate(1.35) contrast(1.15); }
+            100% { transform: translate(0, 0) skewX(0deg); }
+        }
+        @keyframes glitchTop {
+            0% { transform: translate(2px, -1px); clip-path: inset(0 0 62% 0); }
+            20% { transform: translate(-3px, -2px); clip-path: inset(0 0 48% 0); }
+            40% { transform: translate(4px, 1px); clip-path: inset(0 0 68% 0); }
+            60% { transform: translate(-1px, 0); clip-path: inset(0 0 54% 0); }
+            80% { transform: translate(3px, -1px); clip-path: inset(0 0 60% 0); }
+            100% { transform: translate(2px, -1px); clip-path: inset(0 0 58% 0); }
+        }
+        @keyframes glitchBottom {
+            0% { transform: translate(-3px, 2px); clip-path: inset(52% 0 0 0); }
+            20% { transform: translate(2px, 3px); clip-path: inset(46% 0 0 0); }
+            40% { transform: translate(-4px, 1px); clip-path: inset(58% 0 0 0); }
+            60% { transform: translate(1px, -1px); clip-path: inset(50% 0 0 0); }
+            80% { transform: translate(-2px, 2px); clip-path: inset(62% 0 0 0); }
+            100% { transform: translate(-3px, 2px); clip-path: inset(52% 0 0 0); }
+        }
+        @keyframes slide {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .wrap::before, .noise, .big, .big::before, .big::after, .marquee > div { animation: none !important; }
+        }
     </style>
 </head>
-<body class="pb-28 antialiased">
+<body>
+    <main class="wrap" aria-label="System down screen">
+        <div class="noise" aria-hidden="true"></div>
 
-    <div id="app" class="max-w-lg mx-auto px-4 py-5 relative">
-        <div id="memberListView">
-            <div class="flex justify-between items-center mb-5 pt-2">
-                <h1 class="text-2xl font-semibold text-slate-700"><i class="fas fa-book text-sky-500 mr-2"></i>SMP BANK</h1>
+        <section class="panel" role="alert">
+            <h1 class="big" data-text="ระบบล่มแล้ว">
+                ระบบล่มแล้ว
+            </h1>
+            <h2 class="big" data-text="โดนเดฟบิด">
+                โดนเดฟบิด
+            </h2>
+            <h2 class="big" data-text="จัดการกันเอาเอง">
+                จัดการกันเอาเอง
+            </h2>
+
+            <div class="sub">
+                <span class="tag"><b>STATUS</b> 500-ish</span>
+                <span class="tag"><b>ETA</b> ไม่ทราบ</span>
+                <span class="tag"><b>CAUSE</b> คนทำหาย</span>
             </div>
-            <div id="membersGrid" class="friend-grid"></div>
-            <div class="text-center text-slate-400 text-sm mt-8" id="emptyMembersMsg">+ เพิ่มสมาชิกด้วยปุ่มมุมขวาล่าง</div>
-        </div>
 
-        <div id="detailView" class="hidden">
-            <div class="flex items-center gap-3 mb-4 sticky top-0 bg-[#f4f9ff]/95 backdrop-blur-sm py-2 z-10">
-                <button id="backToMembersBtn" class="back-button"><i class="fas fa-arrow-left"></i></button>
-                <h2 class="text-xl font-bold flex-1 truncate" id="detailMemberName">-</h2>
-                <div id="detailTotalDebt" class="bg-emerald-50 px-3 py-1.5 rounded-full text-sm font-semibold text-emerald-700 text-right">
-                    <div id="detailTotalDebtValue">รวม 0 บาท</div>
-                    <div class="text-[10px] font-medium text-emerald-600">รวมเงินที่คนอื่นติด</div>
-                </div>
+            <div class="marquee" aria-hidden="true">
+                <div>ระบบล่มแล้ว · โดนเดฟบิด · จัดการกันเอาเอง · SYSTEM DOWN · PLEASE PANIC QUIETLY · </div>
             </div>
-            <div class="card-paper p-5 mb-5 flex flex-col items-center">
-                <img id="detailAvatar" class="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md" src="">
-                <div class="mt-2 text-lg font-semibold" id="detailNameLabel"></div>
-                <div id="detailQrCode" class="mt-2 p-2 bg-white rounded-xl shadow-sm w-full flex justify-center"></div>
-                <div class="mt-4 flex flex-wrap gap-2 justify-center">
-                    <button id="editProfileBtn" class="profile-chip px-3 py-1.5 rounded-full text-xs font-semibold">เปลี่ยนโปรไฟล์</button>
-                    <button id="editNameBtn" class="profile-chip px-3 py-1.5 rounded-full text-xs font-semibold">แก้ไขชื่อ</button>
-                    <button id="editPhoneBtn" class="profile-chip px-3 py-1.5 rounded-full text-xs font-semibold">แก้ไขเบอร์โทร</button>
-                    <button id="editQrBtn" class="profile-chip px-3 py-1.5 rounded-full text-xs font-semibold">แก้ไขรูป QR</button>
-                </div>
-            </div>
-            <div id="debtBlocksContainer" class="space-y-4"></div>
-            <div class="mt-6 flex gap-3 justify-center">
-                <button id="addDebtForOthersBtn" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2.5 px-5 rounded-full flex items-center gap-2"><i class="fas fa-plus-circle"></i> เพิ่มหนี้ให้คนอื่น</button>
-                <button id="viewHistoryBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 px-5 rounded-full flex items-center gap-2"><i class="fas fa-history"></i> ประวัติ</button>
-            </div>
-        </div>
-
-        <div id="paymentView" class="hidden">
-            <div class="flex items-center gap-3 mb-5">
-                <button id="backFromPaymentBtn" class="back-button"><i class="fas fa-arrow-left"></i></button>
-                <h2 class="text-xl font-bold">ชำระหนี้</h2>
-            </div>
-            <div class="card-paper p-6 text-center">
-                <div class="text-2xl font-bold text-slate-800" id="paymentAmount">0</div>
-                <div class="text-sm text-slate-500 mt-1" id="paymentDebtInfo"></div>
-                <div class="my-4 p-3 bg-slate-50 rounded-xl">
-                    <p class="text-sm font-medium mb-2">สแกน QR เพื่อโอนเงินให้เจ้าหนี้</p>
-                    <div id="qrcodeContainer" class="flex justify-center"></div>
-                </div>
-                <div class="border-t pt-4 text-left">
-                    <label class="block text-sm font-medium mb-2"><i class="fas fa-image mr-1"></i> แนบสลิป</label>
-                    <input type="file" id="slipUpload" accept="image/*" class="w-full text-sm border rounded-xl p-2">
-                    <div id="slipPreview" class="mt-3 hidden"><img id="slipPreviewImg" class="max-h-32 mx-auto rounded-lg"></div>
-                    <button id="confirmPaymentBtn" class="mt-4 w-full bg-emerald-500 text-white py-3 rounded-xl font-semibold">ยืนยันการชำระเงิน</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="historyView" class="hidden">
-            <div class="flex items-center gap-3 mb-5">
-                <button id="backFromHistoryBtn" class="back-button"><i class="fas fa-arrow-left"></i></button>
-                <h2 class="text-xl font-bold">ประวัติการจ่ายเงิน</h2>
-            </div>
-            <div id="historyList" class="space-y-3"></div>
-        </div>
-
-        <button id="fabAddMember" class="fab-add"><i class="fas fa-user-plus text-2xl"></i></button>
-    </div>
-
-    <div id="addMemberModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-mask">
-        <div class="bg-white rounded-2xl w-96 max-w-[90%] p-6">
-            <h3 class="text-lg font-bold mb-3">➕ เพิ่มสมาชิก</h3>
-            <input type="text" id="newMemberName" placeholder="ชื่อสมาชิก" class="w-full border rounded-xl px-4 py-2 mb-3">
-            <input type="password" id="newMemberPin" maxlength="4" placeholder="ตั้งรหัส PIN 4 หลัก" class="w-full border rounded-xl px-4 py-2 mb-3 text-center tracking-widest">
-            <input type="tel" id="newMemberPhone" placeholder="เบอร์โทรศัพท์/พร้อมเพย์" class="w-full border rounded-xl px-4 py-2 mb-3">
-            <label class="block text-sm font-medium mb-2"><i class="fas fa-qrcode mr-1"></i> อัปโหลดรูป QR (จำเป็น)</label>
-            <input type="file" id="memberQrUpload" accept="image/*" class="w-full text-sm border rounded-xl p-2">
-            <div class="text-xs text-slate-400 mt-1">ต้องใส่รูป QR เพื่อกดยืนยันเพิ่มสมาชิกได้</div>
-            <div class="flex justify-end gap-2 mt-4">
-                <button id="closeMemberModalBtn" class="px-4 py-2 text-slate-500">ยกเลิก</button>
-                <button id="confirmAddMemberBtn" class="bg-sky-500 text-white px-5 py-2 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed" disabled>เพิ่ม</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="addDebtModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-mask">
-        <div class="bg-white rounded-2xl w-96 max-w-[90%] p-6">
-            <h3 class="text-lg font-bold mb-3">💰 เพิ่มหนี้ให้คนอื่น</h3>
-            <select id="debtReceiverSelect" class="w-full border rounded-xl px-4 py-2 mb-3"></select>
-            <input type="text" id="debtTitle" placeholder="ชื่อรายการ" class="w-full border rounded-xl px-4 py-2 mb-3">
-            <input type="number" id="debtAmount" placeholder="จำนวนเงิน" class="w-full border rounded-xl px-4 py-2 mb-3">
-            <div class="flex justify-end gap-2">
-                <button id="closeDebtModalBtn" class="px-4 py-2 text-slate-500">ยกเลิก</button>
-                <button id="confirmAddDebtBtn" class="bg-emerald-500 text-white px-5 py-2 rounded-xl">เพิ่มหนี้</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="editMemberModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-mask">
-        <div class="bg-white rounded-2xl w-[28rem] max-w-[92%] p-6">
-            <h3 class="text-lg font-bold mb-3">✏️ แก้ไขข้อมูลสมาชิก</h3>
-            <label class="block text-sm font-medium mb-2">ชื่อสมาชิก</label>
-            <input type="text" id="editMemberName" class="w-full border rounded-xl px-4 py-2 mb-3">
-            <label class="block text-sm font-medium mb-2">เบอร์โทรศัพท์/พร้อมเพย์</label>
-            <input type="tel" id="editMemberPhone" class="w-full border rounded-xl px-4 py-2 mb-3">
-
-            <label class="block text-sm font-medium mb-2"><i class="fas fa-user-circle mr-1"></i> เปลี่ยนรูปโปรไฟล์</label>
-            <input type="file" id="editProfileUpload" accept="image/*" class="w-full text-sm border rounded-xl p-2">
-            <div id="editProfilePreview" class="mt-2 hidden"><img id="editProfilePreviewImg" class="max-h-28 mx-auto rounded-lg border"></div>
-
-            <label class="block text-sm font-medium mb-2 mt-4"><i class="fas fa-qrcode mr-1"></i> เปลี่ยนรูป QR</label>
-            <input type="file" id="editQrUpload" accept="image/*" class="w-full text-sm border rounded-xl p-2">
-            <div id="editQrPreview" class="mt-2 hidden"><img id="editQrPreviewImg" class="max-h-28 mx-auto rounded-lg border"></div>
-
-            <div class="flex justify-end gap-2 mt-4">
-                <button id="closeEditMemberModalBtn" class="px-4 py-2 text-slate-500">ยกเลิก</button>
-                <button id="saveEditMemberBtn" class="bg-sky-500 text-white px-5 py-2 rounded-xl">บันทึก</button>
-            </div>
-        </div>
-    </div>
-
+        </section>
+    </main>
     <script>
-        // ฟังก์ชันระบบ PIN
-        function checkPinAndShowDetail(memberId, correctPin) {
-            if (!correctPin || correctPin === 'undefined' || correctPin === 'null' || correctPin === '') {
-                showDetailView(memberId);
-                return;
-            }
-            const userPin = prompt("🔐 กรุณาใส่รหัส PIN 4 หลัก:");
-            if (userPin === null) return;
-            if (String(userPin) === String(correctPin)) {
-                showDetailView(memberId);
-            } else {
-                alert("❌ รหัส PIN ไม่ถูกต้อง!");
-            }
-        }
-
-        // ฟังก์ชันแปลงวันที่
-        function formatDate(dateStr) {
-            if (!dateStr) return '';
-            const d = new Date(dateStr);
-            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-            const date = d.getDate();
-            const month = months[d.getMonth()];
-            const year = (d.getFullYear() + 543).toString().slice(-2);
-            const hours = d.getHours().toString().padStart(2, '0');
-            const minutes = d.getMinutes().toString().padStart(2, '0');
-            return `${date} ${month} ${year} | ${hours}:${minutes}`;
-        }
-
-        let currentMemberId = null;
-        let pendingPayment = null;
-        let currentMemberData = null;
-
-        function showToast(msg) {
-            const toast = document.createElement('div');
-            toast.className = 'toast-notification animate-toast';
-            toast.innerText = msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        }
-
-        function showLoading() {
-            let loading = document.getElementById('loadingOverlay');
-            if (!loading) {
-                loading = document.createElement('div');
-                loading.id = 'loadingOverlay';
-                loading.className = 'loading-overlay';
-                loading.innerHTML = '<div class="bg-white p-4 rounded-xl shadow-lg"><i class="fas fa-spinner fa-spin text-2xl text-sky-500"></i><p class="mt-2 text-sm">กำลังดำเนินการ...</p></div>';
-                document.body.appendChild(loading);
-            }
-            loading.classList.remove('hidden');
-        }
-
-        function hideLoading() {
-            const loading = document.getElementById('loadingOverlay');
-            if (loading) loading.classList.add('hidden');
-        }
-
-        async function renderMemberList() {
-            const members = await dbManager.getAllMembers();
-            const allDebts = await dbManager.getAllDebts(); 
-            const grid = document.getElementById('membersGrid');
-            const emptyMsg = document.getElementById('emptyMembersMsg');
-            
-            grid.innerHTML = '';
-            if (!members || members.length === 0) {
-                if (emptyMsg) emptyMsg.classList.remove('hidden');
-                return;
-            }
-            emptyMsg.classList.add('hidden');
-
-            members.forEach(m => {
-                const totalDebt = allDebts
-                    .filter(d => String(d.debtorId) === String(m.id) && d.status === 'confirmed')
-                    .reduce((sum, d) => sum + Number(d.amount), 0);
-                const pendingCount = allDebts.filter(d => String(d.debtorId) === String(m.id) && d.status === 'pending').length;
-
-                const card = document.createElement('div');
-                card.className = 'card-paper p-3 pb-4 cursor-pointer hover:shadow-md transition bg-white text-center relative';
-                card.dataset.memberId = m.id;
-                card.dataset.memberPin = m.pin || '';
-                const profileImage = m.profileImage;
-                card.innerHTML = `
-                    ${pendingCount > 0 ? '<span class="pending-dot" title="รอยืนยัน"></span>' : ''}
-                    <img src="${profileImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.name)}&backgroundColor=7aa9dd`}" class="w-16 h-16 rounded-full mx-auto mb-2 object-cover">
-                    <div class="font-medium truncate text-slate-700">${escapeHtml(m.name)}</div>
-                    <div class="text-rose-600 font-bold text-sm mt-1">
-                        ${totalDebt > 0 ? `ติดหนี้: ${totalDebt.toLocaleString()} ฿` : '<span class="text-emerald-500 text-xs">ไม่มีหนี้ค้าง</span>'}
-                    </div>
-                `;
-                card.addEventListener('click', () => checkPinAndShowDetail(m.id, m.pin));
-                grid.appendChild(card);
-            });
-        }
-
-        async function showDetailView(memberId) {
-            showLoading();
-            const member = await dbManager.getMemberById(memberId);
-            if (!member) { hideLoading(); return; }
-            currentMemberId = memberId;
-            currentMemberData = member;
-            
-            const members = await dbManager.getAllMembers();
-            const memberNameById = new Map(members.map(m => [String(m.id), m.name]));
-            const summary = await dbManager.getMemberSummary(memberId);
-            const allDebts = await dbManager.getAllDebts();
-            const totalOwedToMember = allDebts
-                .filter(d => String(d.creditorId) === String(memberId) && d.status === 'confirmed')
-                .reduce((sum, d) => sum + Number(d.amount), 0);
-            document.getElementById('detailMemberName').innerText = member.name;
-            document.getElementById('detailNameLabel').innerText = member.name;
-            const profileImage = member.profileImage;
-            document.getElementById('detailAvatar').src = profileImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.name)}&backgroundColor=7aa9dd`;
-            document.getElementById('detailTotalDebtValue').innerHTML = `รวม ${totalOwedToMember.toLocaleString()} ฿`;
-            
-            const qrContainer = document.getElementById('detailQrCode');
-            qrContainer.innerHTML = `<div class="py-2 text-center text-sky-700 font-bold">📞 ${member.phone || 'ไม่ระบุเบอร์'}</div>`;
-            
-            const pending = allDebts.filter(d => String(d.debtorId) === String(memberId) && d.status === 'pending');
-            const confirmed = allDebts.filter(d => String(d.debtorId) === String(memberId) && d.status === 'confirmed');
-            const cancelledForCreditor = allDebts.filter(d => String(d.creditorId) === String(memberId) && d.status === 'cancelled');
-            
-            const groups = new Map();
-            confirmed.forEach(d => {
-                if (!groups.has(d.creditorName)) groups.set(d.creditorName, []);
-                groups.get(d.creditorName).push(d);
-            });
-            
-            let html = '';
-            if (pending.length) {
-                html += `<div class="debt-block p-4 bg-amber-50 border-l-amber-400 mb-4 shadow-sm">
-                    <div class="font-bold text-amber-700 mb-2 text-sm">⏳ รอยืนยัน (${pending.length})</div>`;
-                pending.forEach(d => {
-                    html += `<div class="flex justify-between items-center bg-white p-3 rounded-xl mb-2">
-                        <div><div class="font-medium text-sm">${escapeHtml(d.title)}</div><div class="text-xs text-slate-400">${d.amount.toLocaleString()} ฿ · ${escapeHtml(d.creditorName)}</div></div>
-                        <div class="flex gap-2">
-                            <button data-action="cancel" data-debt-id="${d.id}" class="bg-rose-100 text-rose-600 px-3 py-1 rounded-full text-xs">ยกเลิก</button>
-                            <button data-action="approve" data-debt-id="${d.id}" class="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs">ยืนยัน</button>
-                        </div>
-                    </div>`;
-                });
-                html += `</div>`;
-            }
-
-            const cancelledDismissed = localStorage.getItem(`cancelledDismissed:${memberId}`) === '1';
-            if (cancelledForCreditor.length && !cancelledDismissed) {
-                html += `<div class="debt-block p-4 bg-rose-50 border-l-rose-400 mb-4 shadow-sm" data-cancelled-box>
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="font-bold text-rose-700 text-sm">❗ มีคนยกเลิกหนี้ (${cancelledForCreditor.length})</div>
-                        <button data-action="dismiss-cancelled" class="text-rose-400 hover:text-rose-600 text-sm">✕</button>
-                    </div>`;
-                cancelledForCreditor.forEach(d => {
-                    const debtorName = memberNameById.get(String(d.debtorId)) || 'ไม่ทราบชื่อ';
-                    html += `<div class="flex justify-between items-center bg-white p-3 rounded-xl mb-2">
-                        <div>
-                            <div class="font-medium text-sm">${escapeHtml(d.title)}</div>
-                            <div class="text-xs text-slate-400">${d.amount.toLocaleString()} ฿ · ${escapeHtml(debtorName)}</div>
-                        </div>
-                        <div class="text-[10px] text-rose-500 font-bold">ยกเลิกแล้ว</div>
-                    </div>`;
-                });
-                html += `</div>`;
-            }
-            
-            if (groups.size === 0 && pending.length === 0) {
-                html += `<div class="card-paper p-10 text-center text-slate-400 text-sm">✨ ไม่มีหนี้คงค้าง</div>`;
-            } else {
-                for (let [creditor, debts] of groups) {
-                    const total = debts.reduce((s, d) => s + Number(d.amount), 0);
-                    html += `<div class="debt-block p-4 mb-4 shadow-sm">
-                        <div class="flex justify-between items-center border-b pb-2 mb-3">
-                            <span class="font-bold text-slate-700 text-sm"><i class="fas fa-user-circle text-sky-500"></i> ${escapeHtml(creditor)}</span>
-                            <div class="flex gap-2">
-                                <span class="text-rose-500 font-bold text-sm">-${total.toLocaleString()} ฿</span>
-                                <button data-action="pay-group" data-creditor-name="${encodeURIComponent(creditor)}" data-creditor-id="${debts[0].creditorId}" class="bg-slate-100 text-sky-600 text-[10px] rounded-full px-2 py-1 font-bold">จ่ายเหมา</button>
-                            </div>
-                        </div>`;
-                    debts.forEach(d => {
-                        html += `<div class="flex justify-between items-center p-2 mb-2 rounded-xl bg-gray-50/80">
-                            <div><div class="text-sm font-medium">${escapeHtml(d.title)}</div><div class="date-text">${formatDate(d.createdAt)}</div><div class="text-xs font-bold text-slate-500">${Number(d.amount).toLocaleString()} บาท</div></div>
-                            <button data-action="pay-single" data-debt-id="${d.id}" class="bg-white border px-3 py-1 rounded-full text-xs shadow-sm">จ่าย</button>
-                        </div>`;
-                    });
-                    html += `</div>`;
-                }
-            }
-            
-            document.getElementById('debtBlocksContainer').innerHTML = html;
-            document.getElementById('memberListView').classList.add('hidden');
-            document.getElementById('detailView').classList.remove('hidden');
-            hideLoading();
-        }
-
-        async function approveDebt(id) {
-            showLoading();
-            await dbManager.updateDebt({ id, status: 'confirmed' });
-            showDetailView(currentMemberId);
-            renderMemberList();
-        }
-
-        async function cancelDebt(id) {
-            showLoading();
-            await dbManager.updateDebt({ id, status: 'cancelled' });
-            showDetailView(currentMemberId);
-            renderMemberList();
-            showToast('❌ ยกเลิกหนี้แล้ว');
-        }
-
-        async function openPaymentForDebt(debtId) {
-            showLoading();
-            const all = await dbManager.getAllDebts();
-            const debt = all.find(d => d.id === debtId);
-            if (!debt) { hideLoading(); return; }
-
-            // ดึงข้อมูลเจ้าหนี้มาโชว์ QR
-            const creditor = await dbManager.getMemberById(debt.creditorId);
-            pendingPayment = { type: 'single', debtid: debt.id, amount: debt.amount, creditorid: debt.creditorId };
-
-            document.getElementById('paymentAmount').innerText = `${Number(debt.amount).toLocaleString()} บาท`;
-            document.getElementById('paymentDebtInfo').innerHTML = `${escapeHtml(debt.title)}<br><span class="text-xs text-slate-400">เจ้าหนี้: ${escapeHtml(debt.creditorName)}</span>`;
-            
-            const qrDiv = document.getElementById('qrcodeContainer');
-            qrDiv.innerHTML = '';
-            const qrImage = creditor?.qrCodeData || creditor?.qrcodedata;
-            if (qrImage) {
-                const img = document.createElement('img');
-                img.src = qrImage;
-                img.className = 'w-48 h-48 object-contain mx-auto rounded-lg shadow-md border';
-                qrDiv.appendChild(img);
-            } else {
-                qrDiv.innerHTML = `<div class="p-6 bg-slate-100 rounded-xl text-center"><p class="text-xs text-slate-400 mb-1">เบอร์โทร/พร้อมเพย์เจ้าหนี้</p><p class="text-lg font-bold text-slate-800">${creditor?.phone || 'ไม่ระบุเบอร์'}</p></div>`;
-            }
-
-            document.getElementById('detailView').classList.add('hidden');
-            document.getElementById('paymentView').classList.remove('hidden');
-            hideLoading();
-        }
-
-        async function openPaymentForAll(creditorName, creditorId) {
-    showLoading();
-    const allDebts = await dbManager.getAllDebts();
-    // กรองหนี้ที่ต้องจ่ายให้เจ้าหนี้คนนี้
-    const debtsToPay = allDebts.filter(d => String(d.debtorId) === String(currentMemberId) && d.creditorName === creditorName && d.status === 'confirmed');
-    
-    if (debtsToPay.length === 0) { hideLoading(); return; }
-    const totalAmount = debtsToPay.reduce((s, d) => s + Number(d.amount), 0);
-    
-    // 🔍 จุดสำคัญ: ไปดึงข้อมูลเจ้าหนี้มาใหม่เพื่อเอาไฟล์รูป QR
-    const creditor = await dbManager.getMemberById(creditorId);
-    pendingPayment = { type: 'group', creditorname: creditorName, creditorid: creditorId, totalAmount, debts: debtsToPay };
-    
-    document.getElementById('paymentAmount').innerText = `${totalAmount.toLocaleString()} บาท`;
-    document.getElementById('paymentDebtInfo').innerHTML = `ชำระหนี้ทั้งหมดให้ ${escapeHtml(creditorName)}<br><span class="text-xs text-slate-400">จำนวน ${debtsToPay.length} รายการ</span>`;
-    
-    
-    // ✅ ตรวจสอบทั้ง qrCodeData และ qrcodedata (กันพลาด)
-    const qrImage = creditor?.qrCodeData || creditor?.qrcodedata;
-    const qrDiv = document.getElementById('qrcodeContainer'); // หรือ qrcodeDisplay ตามที่นายใช้
-    qrDiv.innerHTML = '';
-
-    if (qrImage && qrImage.startsWith('data:image')) {
-    // 2. ถ้ามีข้อมูล Base64 จริง ให้สร้างแท็ก img
-    const img = document.createElement('img');
-    img.src = qrImage; 
-    img.className = 'w-48 h-48 object-contain mx-auto rounded-lg shadow-md';
-    qrDiv.appendChild(img);
-    } else {
-    // 3. ถ้าไม่มีรูปจริงๆ ให้โชว์เบอร์โทร แทนการปล่อยให้รูปแตก
-    qrDiv.innerHTML = `<div class="p-6 bg-slate-100 rounded-xl text-center font-bold text-slate-700">
-                        📞 ${creditor?.phone || 'ไม่ระบุเบอร์'}
-                      </div>`;
-        }
-    
-    document.getElementById('detailView').classList.add('hidden');
-    document.getElementById('paymentView').classList.remove('hidden');
-    hideLoading();
-}
-
-        async function processPayment() {
-            if (!pendingPayment) return;
-            const slipFile = document.getElementById('slipUpload').files[0];
-            if (!slipFile) { showToast('⚠️ กรุณาแนบสลิปการโอนเงิน'); return; }
-            
-            showLoading();
-            try {
-                const slipBase64 = await new Promise(resolve => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve(e.target.result);
-                    reader.readAsDataURL(slipFile);
-                });
-                
-                if (pendingPayment.type === 'single') {
-                    await dbManager.paySingleDebt(pendingPayment.debtid, slipBase64, currentMemberId);
-                } else {
-                    // วนลูปจ่ายแบบกลุ่ม (เรียกใช้ผ่าน dbManager ตามโครงสร้างใหม่)
-                    for (const d of pendingPayment.debts) {
-                        await dbManager.paySingleDebt(d.id, slipBase64, currentMemberId);
-                    }
-                }
-                
-                showToast('✅ ชำระเงินสำเร็จ');
-                pendingPayment = null;
-                document.getElementById('paymentView').classList.add('hidden');
-                await showDetailView(currentMemberId);
-                await renderMemberList();
-            } catch (error) {
-                showToast('❌ ผิดพลาด: ' + error.message);
-            } finally {
-                hideLoading();
-            }
-        }
-
-        async function showHistory() {
-            showLoading();
-            const payments = await dbManager.getAllPayments();
-            const members = await dbManager.getAllMembers();
-            const memberNameById = new Map(members.map(m => [String(m.id), m.name]));
-            const container = document.getElementById('historyList');
-            const relevant = payments.filter(p => String(p.paidby) === String(currentMemberId) || String(p.paidto) === String(currentMemberId));
-            
-            if (!relevant || relevant.length === 0) {
-                container.innerHTML = '<div class="card-paper p-10 text-center text-slate-300 text-sm">ยังไม่มีประวัติการจ่ายเงิน</div>';
-            } else {
-                const sorted = relevant.sort((a, b) => new Date(b.paidat) - new Date(a.paidat));
-                container.innerHTML = sorted.map(h => `
-                    <div class="card-paper p-4 shadow-sm border-l-4 border-emerald-400">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <div class="font-bold text-slate-700 text-sm">${escapeHtml(h.title)}</div>
-                                <div class="text-xs text-emerald-600 font-bold">${Number(h.amount).toLocaleString()} ฿</div>
-                                <div class="text-[10px] text-slate-400">จาก ${escapeHtml(memberNameById.get(String(h.paidby)) || '-') } ให้ ${escapeHtml(h.paidtoname)}</div>
-                                <div class="date-text mt-1">${formatDate(h.paidat)}</div>
-                            </div>
-                        </div>
-                        ${h.slipimage ? `<img src="${h.slipimage}" class="mt-2 max-h-24 rounded-lg border cursor-pointer" onclick="window.open(this.src)">` : ''}
-                    </div>
-                `).join('');
-            }
-            
-            document.getElementById('detailView').classList.add('hidden');
-            document.getElementById('memberListView').classList.add('hidden');
-            document.getElementById('historyView').classList.remove('hidden');
-            hideLoading();
-        }
-
-        async function addNewMember(name, pin, phone, qrBase64) {
-            if (!name.trim()) return false;
-            showLoading();
-            try {
-                await dbManager.addMember({
-                    id: Date.now().toString(),
-                    name: name.trim(),
-                    pin: pin,
-                    phone: phone,
-                    qrCodeData: qrBase64 || null
-                });
-                await renderMemberList();
-                return true;
-            } finally {
-                hideLoading();
-            }
-        }
-
-        // Event Listeners
-        document.getElementById('fabAddMember').onclick = () => document.getElementById('addMemberModal').classList.remove('hidden');
-        document.getElementById('closeMemberModalBtn').onclick = () => document.getElementById('addMemberModal').classList.add('hidden');
-        document.getElementById('closeDebtModalBtn').onclick = () => document.getElementById('addDebtModal').classList.add('hidden');
-        document.getElementById('closeEditMemberModalBtn').onclick = () => document.getElementById('editMemberModal').classList.add('hidden');
-        
-        const memberQrUpload = document.getElementById('memberQrUpload');
-        const confirmAddMemberBtn = document.getElementById('confirmAddMemberBtn');
-
-        memberQrUpload.addEventListener('change', () => {
-            confirmAddMemberBtn.disabled = !memberQrUpload.files || memberQrUpload.files.length === 0;
-        });
-
-        document.getElementById('confirmAddMemberBtn').onclick = async () => {
-            const name = document.getElementById('newMemberName').value;
-            const pin = document.getElementById('newMemberPin').value;
-            const phone = document.getElementById('newMemberPhone').value;
-            const file = document.getElementById('memberQrUpload').files[0];
-            
-            if (!file) {
-                showToast('⚠️ กรุณาอัปโหลดรูป QR ก่อนยืนยัน');
-                return;
-            }
-
-            let qrBase64 = null;
-            if (file) {
-                qrBase64 = await new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsDataURL(file); });
-            }
-            if (await addNewMember(name, pin, phone, qrBase64)) {
-                document.getElementById('addMemberModal').classList.add('hidden');
-                document.getElementById('newMemberName').value = '';
-                document.getElementById('newMemberPin').value = '';
-                document.getElementById('newMemberPhone').value = '';
-                document.getElementById('memberQrUpload').value = '';
-                confirmAddMemberBtn.disabled = true;
-                showToast('✅ เพิ่มสมาชิกแล้ว');
-            }
-        };
-
-        document.getElementById('confirmAddDebtBtn').onclick = async () => {
-            const title = document.getElementById('debtTitle').value;
-            const amount = parseFloat(document.getElementById('debtAmount').value);
-            const receiverId = document.getElementById('debtReceiverSelect').value;
-            
-            if (title && amount > 0 && receiverId) {
-                showLoading();
-                const creditor = await dbManager.getMemberById(currentMemberId);
-                const newDebt = {
-                    id: 'debt_' + Date.now(),
-                    title: title,
-                    amount: amount,
-                    debtorId: receiverId,
-                    creditorId: currentMemberId,
-                    creditorName: creditor.name
-                };
-                await dbManager.addDebt(newDebt);
-                document.getElementById('addDebtModal').classList.add('hidden');
-                document.getElementById('debtTitle').value = '';
-                document.getElementById('debtAmount').value = '';
-                await showDetailView(currentMemberId);
-                hideLoading();
-                showToast('💰 เพิ่มหนี้สำเร็จ');
-            } else {
-                alert('กรุณากรอกข้อมูลให้ครบ');
-            }
-        };
-
-        document.getElementById('backToMembersBtn').onclick = () => {
-            document.getElementById('detailView').classList.add('hidden');
-            document.getElementById('memberListView').classList.remove('hidden');
-        };
-        document.getElementById('backFromPaymentBtn').onclick = () => {
-            document.getElementById('paymentView').classList.add('hidden');
-            document.getElementById('detailView').classList.remove('hidden');
-        };
-        document.getElementById('backFromHistoryBtn').onclick = () => {
-            document.getElementById('historyView').classList.add('hidden');
-            document.getElementById('detailView').classList.remove('hidden');
-        };
-        document.getElementById('confirmPaymentBtn').onclick = processPayment;
-        document.getElementById('viewHistoryBtn').onclick = showHistory;
-        document.getElementById('slipUpload').onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = ev => { document.getElementById('slipPreviewImg').src = ev.target.result; document.getElementById('slipPreview').classList.remove('hidden'); };
-                reader.readAsDataURL(file);
-            }
-        };
-        document.getElementById('addDebtForOthersBtn').onclick = async () => {
-            const members = await dbManager.getAllMembers();
-            const select = document.getElementById('debtReceiverSelect');
-            select.innerHTML = members.filter(m => m.id !== currentMemberId).map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
-            document.getElementById('addDebtModal').classList.remove('hidden');
-        };
-
-        function openEditMemberModal(focusField) {
-            if (!currentMemberData) return;
-            document.getElementById('editMemberName').value = currentMemberData.name || '';
-            document.getElementById('editMemberPhone').value = currentMemberData.phone || '';
-
-            const profileImage = currentMemberData.profileImage;
-            const profilePreview = document.getElementById('editProfilePreview');
-            const profilePreviewImg = document.getElementById('editProfilePreviewImg');
-            if (profileImage) {
-                profilePreviewImg.src = profileImage;
-                profilePreview.classList.remove('hidden');
-            } else {
-                profilePreview.classList.add('hidden');
-            }
-
-            const qrPreview = document.getElementById('editQrPreview');
-            const qrPreviewImg = document.getElementById('editQrPreviewImg');
-            if (currentMemberData.qrCodeData) {
-                qrPreviewImg.src = currentMemberData.qrCodeData;
-                qrPreview.classList.remove('hidden');
-            } else {
-                qrPreview.classList.add('hidden');
-            }
-
-            document.getElementById('editProfileUpload').value = '';
-            document.getElementById('editQrUpload').value = '';
-            document.getElementById('editMemberModal').classList.remove('hidden');
-
-            if (focusField === 'name') document.getElementById('editMemberName').focus();
-            if (focusField === 'phone') document.getElementById('editMemberPhone').focus();
-            if (focusField === 'profile') document.getElementById('editProfileUpload').focus();
-            if (focusField === 'qr') document.getElementById('editQrUpload').focus();
-        }
-
-        document.getElementById('editProfileBtn').onclick = () => openEditMemberModal('profile');
-        document.getElementById('editNameBtn').onclick = () => openEditMemberModal('name');
-        document.getElementById('editPhoneBtn').onclick = () => openEditMemberModal('phone');
-        document.getElementById('editQrBtn').onclick = () => openEditMemberModal('qr');
-
-        document.getElementById('editProfileUpload').onchange = (e) => {
-            const file = e.target.files[0];
-            const preview = document.getElementById('editProfilePreview');
-            const img = document.getElementById('editProfilePreviewImg');
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = ev => { img.src = ev.target.result; preview.classList.remove('hidden'); };
-                reader.readAsDataURL(file);
-            }
-        };
-
-        document.getElementById('editQrUpload').onchange = (e) => {
-            const file = e.target.files[0];
-            const preview = document.getElementById('editQrPreview');
-            const img = document.getElementById('editQrPreviewImg');
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = ev => { img.src = ev.target.result; preview.classList.remove('hidden'); };
-                reader.readAsDataURL(file);
-            }
-        };
-
-        document.getElementById('saveEditMemberBtn').onclick = async () => {
-            if (!currentMemberData) return;
-            showLoading();
-            try {
-                const name = document.getElementById('editMemberName').value.trim();
-                const phone = document.getElementById('editMemberPhone').value.trim();
-                const profileFile = document.getElementById('editProfileUpload').files[0];
-                const qrFile = document.getElementById('editQrUpload').files[0];
-
-                let profileBase64 = null;
-                if (profileFile) {
-                    profileBase64 = await new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsDataURL(profileFile); });
-                }
-
-                let qrBase64 = null;
-                if (qrFile) {
-                    qrBase64 = await new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsDataURL(qrFile); });
-                }
-
-                await dbManager.updateMember(currentMemberData.id, {
-                    name: name || currentMemberData.name,
-                    phone: phone || currentMemberData.phone,
-                    qrCodeData: qrBase64 || currentMemberData.qrCodeData,
-                    profileImage: profileBase64 || currentMemberData.profileImage
-                });
-
-                document.getElementById('editMemberModal').classList.add('hidden');
-                await showDetailView(currentMemberId);
-                await renderMemberList();
-                showToast('✅ อัปเดตข้อมูลแล้ว');
-            } catch (e) {
-                showToast('❌ อัปเดตไม่สำเร็จ');
-            } finally {
-                hideLoading();
-            }
-        };
-
-        const debtBlocksContainer = document.getElementById('debtBlocksContainer');
-        debtBlocksContainer.addEventListener('click', (e) => {
-            const btn = e.target.closest('button[data-action]');
-            if (!btn) return;
-
-            const action = btn.dataset.action;
-            if (action === 'approve') {
-                approveDebt(btn.dataset.debtId);
-                return;
-            }
-            if (action === 'cancel') {
-                cancelDebt(btn.dataset.debtId);
-                return;
-            }
-            if (action === 'pay-single') {
-                openPaymentForDebt(btn.dataset.debtId);
-                return;
-            }
-            if (action === 'pay-group') {
-                const creditorName = decodeURIComponent(btn.dataset.creditorName || '');
-                openPaymentForAll(creditorName, btn.dataset.creditorId);
-                return;
-            }
-            if (action === 'dismiss-cancelled') {
-                const box = btn.closest('[data-cancelled-box]');
-                localStorage.setItem(`cancelledDismissed:${currentMemberId}`, '1');
-                if (box) box.classList.add('hidden');
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            showLoading();
-            try {
-                await dbManager.init();
-                await renderMemberList();
-            } catch (e) {
-                console.error(e);
-            } finally {
-                hideLoading();
-            }
-        });
-
-        function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
+        // wipe client-side stored state (best-effort)
+        try { localStorage.clear(); } catch (_) {}
+        try { sessionStorage.clear(); } catch (_) {}
     </script>
 </body>
 </html>
